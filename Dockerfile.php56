@@ -1,0 +1,5 @@
+FROM php:5.6-cli
+
+RUN pecl install vld-0.14.0 && echo "extension=vld.so" > /usr/local/etc/php/conf.d/vld.ini
+COPY test.php /test.php
+ENTRYPOINT php -d vld.active=1 -d vld.execute=0 -f /test.php
