@@ -1,19 +1,13 @@
 <?php
 
-$x = '';
+$x = 'a';
+$y = $x.' b';
+echo $y;
 
-if (is_null($x)) {
+$x = 'a';
+$y = "$x b";
+echo $y;
 
-}
-
-if (empty($x)) {
-
-}
-
-if ($x == null) {
-
-}
-
-if ($x === null) {
-
-}
+$x = 'a';
+$y = "{$x} b";
+echo $y;
