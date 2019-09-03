@@ -1,18 +1,18 @@
-PHP Opcode Analysis Kit
+# PHP Opcode Analysis Kit
 
 A set of Docker images to test out PHP code against the interpreter to see the resulting opcodes with multiple PHP versions.
 
-# Usage
+## Usage
 
 Edit the `test.php` file with the code you would like to test. From there, run the bash/PowerShell script to build the containers and test the code. 
 
-## Linux
+### Linux
 
 ```bash
 ./run.sh
 ```
 
-## Windows
+### Windows
 
 ```powershell
 .\run.ps1
