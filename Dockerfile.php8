@@ -1,0 +1,95 @@
+FROM alpine:latest
+
+ENV PHPIZE_DEPS \
+        autoconf \
+        dpkg-dev dpkg \
+        file \
+        g++ \
+        gcc \
+        libc-dev \
+        make \
+        pkgconf \
+        re2c
+
+RUN apk add --no-cache \
+        ca-certificates \
+        curl \
+        tar \
+        xz \
+        libressl
+
+ENV PHP_INI_DIR /usr/local/etc/php
+RUN set -eux; \
+    mkdir -p "$PHP_INI_DIR/conf.d";
+
+ENV PHP_CFLAGS="-fstack-protector-strong -fpic -fpie -O2"
+ENV PHP_CPPFLAGS="$PHP_CFLAGS"
+ENV PHP_LDFLAGS="-Wl,-O1 -Wl,--hash-style=both -pie"
+
+ENV PHP_VERSION 8.0.0
+ENV PHP_URL="https://github.com/php/php-src/archive/master.zip"
+
+RUN set -xe; \
+    apk add --no-cache --virtual .fetch-deps \
+        gnupg \
+        wget \
+    ; \
+    mkdir -p /usr/src; \
+    cd /usr/src; \
+    wget -O php.zip "$PHP_URL"; \
+    apk del --no-network .fetch-deps
+
+COPY scripts/docker-php-source /usr/local/bin/
+
+RUN set -xe \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        bison \
+        libxml2-dev \
+        sqlite-dev \
+    && export \
+        CFLAGS="$PHP_CFLAGS" \
+        CPPFLAGS="$PHP_CPPFLAGS" \
+        LDFLAGS="$PHP_LDFLAGS" \
+    && docker-php-source extract \
+    && cd /usr/src/php/php-src-master \
+    && gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)" \
+    && ./buildconf \
+    && ./configure \
+        --build="$gnuArch" \
+        --with-config-file-path="$PHP_INI_DIR" \
+        --with-config-file-scan-dir="$PHP_INI_DIR/conf.d" \
+        --enable-option-checking=fatal \
+        --enable-pcntl \
+        --enable-opcache \
+        $(test "$gnuArch" = 's390x-linux-gnu' && echo '--without-pcre-jit') \
+        $PHP_EXTRA_CONFIGURE_ARGS \
+    && make -j "$(nproc)" \
+    && find -type f -name '*.a' -delete \
+    && make install \
+    && { find /usr/local/bin /usr/local/sbin -type f -perm +0111 -exec strip --strip-all '{}' + || true; } \
+    && make clean \
+    && cp -v php.ini-* "$PHP_INI_DIR/" \
+    && cd / \
+    && docker-php-source delete \
+    && runDeps="$( \
+        scanelf --needed --nobanner --format '%n#p' --recursive /usr/local \
+            | tr ',' '\n' \
+            | sort -u \
+            | awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
+    )" \
+    && apk add --no-cache $runDeps \
+    && apk del --no-network .build-deps \
+    && rm -rf /tmp/pear ~/.pearrc
+
+RUN apk add --no-cache git autoconf gcc libc-dev make
+RUN git clone https://github.com/derickr/vld.git vld
+RUN cd vld \
+    && phpize \
+    && ./configure \
+    && make install
+
+COPY jit.ini /usr/local/etc/php/conf.d/docker-php-enable-jit.ini
+COPY test.php /test.php
+
+ENTRYPOINT php -d vld.active=1 -d vld.execute=0 -f /test.php
